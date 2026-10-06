@@ -1,0 +1,239 @@
+// KlaimSense — Prisma schema (opsional)
+//
+// PostgreSQL bersifat OPSIONAL. Aplikasi berjalan penuh dengan mock repository
+// in-memory bila DATABASE_URL tidak tersedia.
+//
+// Untuk mengaktifkan mode PostgreSQL:
+//   1. set DATABASE_URL di .env
+//   2. npx prisma generate
+//   3. npx prisma migrate dev --name init
+//   4. npm run db:seed   (mengisi data sintetis)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ServiceType {
+  FISIOTERAPI
+  HEMODIALISIS
+  ALAT_BANTU_DENGAR
+  OBAT_KRONIS
+}
+
+enum HospitalClass {
+  A
+  B
+  C
+  D
+}
+
+enum Severity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum PriorityCategory {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum VerificationStatus {
+  BARU
+  DALAM_PEMERIKSAAN
+  MEMBUTUHKAN_KLARIFIKASI
+  RUJUK_AUDIT
+  DISETUJUI
+  DITOLAK
+}
+
+enum DecisionAction {
+  DISETUJUI
+  MEMBUTUHKAN_KLARIFIKASI
+  RUJUK_AUDIT
+}
+
+enum MachineStatus {
+  THERAPY
+  STANDBY
+  OFFLINE
+}
+
+model Hospital {
+  id                              String            @id
+  name                            String
+  region                          String
+  class                           HospitalClass
+  ownership                       String            @default("Swasta")
+  beds                            Int
+  doctors                         Int
+  physiotherapists                Int
+  dialysisMachines                Int
+  dialysisShiftsPerDay            Int               @default(3)
+  physioSessionsPerTherapistPerDay Int              @default(8)
+  rooms                           Int               @default(0)
+  capacity                        HospitalCapacity?
+  claims                          Claim[]
+  sensorEvents                    SensorEvent[]
+  verificationCases               VerificationCase[]
+
+  @@index([region, class])
+}
+
+model HospitalCapacity {
+  hospitalId    String   @id
+  fisioterapi   Int
+  hemodialisis  Int
+  hospital      Hospital @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+}
+
+model Claim {
+  id                 String             @id
+  hospitalId         String
+  patientRef         String
+  serviceType        ServiceType
+  serviceDate        DateTime           @db.Date
+  quantity           Int
+  unitPrice          Int
+  totalValue         Int
+  description        String             @default("")
+  previouslyPaid     Boolean            @default(false)
+  paidReferenceId    String?
+  aggregateDailyLine Boolean            @default(false)
+  duplicateOf        String?
+  hospital           Hospital           @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  ruleResults        ClaimRuleResult[]
+  verificationCase   VerificationCase?
+
+  @@index([hospitalId, serviceDate])
+  @@index([serviceType, serviceDate])
+  @@index([patientRef, serviceType, serviceDate])
+}
+
+model Rule {
+  ruleId       String            @id
+  name         String
+  category     String
+  severity     Severity
+  scoreImpact  Int
+  active       Boolean           @default(true)
+  description  String
+  threshold    String
+  formula      String
+  example      String
+  dataUsed     String[]
+  policyRefs   String[]
+  results      ClaimRuleResult[]
+}
+
+model ClaimRuleResult {
+  id           String   @id @default(cuid())
+  claimId      String
+  hospitalId   String
+  ruleId       String
+  triggered    Boolean
+  severity     Severity
+  explanation  String
+  evidence     Json
+  nilaiAktual  String
+  nilaiBatas   String
+  satuan       String   @default("")
+  selisih      Float?
+  sumber       String   @default("")
+  scoreImpact  Int      @default(0)
+  claim        Claim    @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  rule         Rule     @relation(fields: [ruleId], references: [ruleId])
+
+  @@index([claimId])
+  @@index([ruleId, triggered])
+}
+
+model SensorEvent {
+  id             String        @id
+  hospitalId     String
+  machineId      String
+  status         MachineStatus
+  powerWatts     Int
+  currentAmps    Float
+  timestamp      DateTime
+  signatureValid Boolean       @default(true)
+  periodDate     DateTime      @db.Date
+  hospital       Hospital      @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+
+  @@index([hospitalId, periodDate])
+}
+
+model Evidence {
+  id          String   @id
+  claimId     String   @unique
+  hospitalId  String
+  generatedAt DateTime @default(now())
+  summary     String
+  disclaimer  String
+  payload     Json
+}
+
+model VerificationCase {
+  id           String             @id
+  claimId      String             @unique
+  hospitalId   String
+  status       VerificationStatus @default(BARU)
+  assignedTo   String             @default("Belum ditugaskan")
+  score        Int                @default(0)
+  category     PriorityCategory   @default(LOW)
+  triggers     String[]
+  reviewerNote String?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  claim        Claim              @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  hospital     Hospital           @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  decisions    Decision[]
+
+  @@index([status])
+  @@index([score])
+}
+
+model Decision {
+  id        String         @id @default(cuid())
+  caseId    String
+  claimId   String
+  action    DecisionAction
+  actor     String
+  note      String         @default("")
+  createdAt DateTime       @default(now())
+  case      VerificationCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([claimId])
+}
+
+model AuditLog {
+  id            String   @id @default(cuid())
+  timestamp     DateTime @default(now())
+  actor         String
+  action        String
+  object        String
+  previousState String
+  newState      String
+  severity      String   @default("info")
+
+  @@index([timestamp])
+  @@index([object])
+}
+
+model PolicyDocument {
+  docId     String   @id
+  title     String
+  issuer    String
+  year      Int
+  available Boolean  @default(false)
+  excerpt   String
+  tags      String[]
+}
