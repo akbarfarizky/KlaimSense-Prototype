@@ -37,6 +37,10 @@ yarn-error.log*
 .env*
 !.env.example
 
+# secrets / tokens (never commit)
+wasmer_token.txt
+*.token
+
 # vercel
 .vercel
 

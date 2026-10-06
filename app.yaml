@@ -1,0 +1,27 @@
+kind: wasmer.io/App.v0
+name: klaimsense-prototype
+owner: toakbarfarizky
+package: .
+scaling:
+  mode: single_concurrency
+description: KlaimSense — Prototype verifikasi klaim BPJS Kesehatan (data sintetis)
+app_id: da_nYYILtXUoLm8
+annotations:
+  anybuild.run/config:
+    commands:
+      start: node .next-bundle/server.mjs
+    edgejs_enable: true
+    edgejs_precompile: true
+    name: out
+    node_build_command: npx -y next-bundle@1.0.0 --build-command 'npm run build'
+    node_framework: next
+    node_install_inputs:
+    - package.json
+    node_package_manager: npm
+    node_package_name: klaimsense
+    node_remove_native_binaries: true
+    node_server: node
+    npm_version: '11'
+  anybuild.run/provider: node
+  anybuild.run/version: 0.33.0
+  wasmer.io/version: 7.5.0
