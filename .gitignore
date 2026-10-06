@@ -17,6 +17,9 @@
 /.next/
 /out/
 
+# wasmer edge build artifact
+/.next-bundle/
+
 # production
 /build
 
